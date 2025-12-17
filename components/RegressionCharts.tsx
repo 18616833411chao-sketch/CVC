@@ -529,7 +529,7 @@ const RegressionCharts: React.FC<Props> = ({ result, targetName }) => {
                 {renderChartInsight("相关性分析", [
                     "深色区域表示两个自变量之间存在强相关性。强相关的自变量会导致系数估计不稳定（标准误增大），即 VIF 升高的直接原因。",
                     strongCorrelations.length > 0 
-                        ? <span><strong>注意：</strong> 检测到以下变量对存在强相关 (>0.7)：{strongCorrelations.slice(0, 3).join('; ')}{strongCorrelations.length > 3 && ' 等'}。这可能会导致模型难以区分它们各自的独立影响。</span>
+                        ? <span><strong>注意：</strong> 检测到以下变量对存在强相关 (&gt;0.7)：{strongCorrelations.slice(0, 3).join('; ')}{strongCorrelations.length > 3 && ' 等'}。这可能会导致模型难以区分它们各自的独立影响。</span>
                         : "自变量之间相关性较低，这是一个好的信号，说明每个变量都提供了独特的信息。"
                 ], strongCorrelations.length > 0 ? 'warning' : 'info')}
             </div>
