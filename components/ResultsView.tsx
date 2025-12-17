@@ -159,8 +159,8 @@ const ResultsView: React.FC<Props> = ({ result, targetName, onReset }) => {
                 </table>
               </div>
               <div className="p-3 bg-slate-50 border-t border-slate-100 text-xs text-slate-500 text-center flex justify-center gap-4">
-                  <span>注：t统计量绝对值 > 2 视为显著。</span>
-                  <span>VIF {'>'} 5 可能存在多重共线性问题。</span>
+                  <span>注：t统计量绝对值 &gt; 2 视为显著。</span>
+                  <span>VIF &gt; 5 可能存在多重共线性问题。</span>
               </div>
            </div>
       </div>
@@ -246,7 +246,7 @@ const ResultsView: React.FC<Props> = ({ result, targetName, onReset }) => {
                 <div>
                     <p className="font-semibold mb-1">统计指标说明:</p>
                     <ul className="list-disc list-inside space-y-1 text-blue-700/80">
-                        <li><strong>显著性:</strong> 标记为“显著”的变量（t-Stat 绝对值 > 2）表示其对结果的影响在统计学上是可靠的，不太可能由随机因素引起。</li>
+                        <li><strong>显著性:</strong> 标记为“显著”的变量（t-Stat 绝对值 &gt; 2）表示其对结果的影响在统计学上是可靠的，不太可能由随机因素引起。</li>
                         <li><strong>R方 (R²):</strong> 越接近 1.0 表示模型越能解释数据的变化。低 R² 可能意味着还有其他未考虑的重要因素。</li>
                         <li><strong>RMSE:</strong> 预测误差的标准差，数值越小越好。</li>
                     </ul>
