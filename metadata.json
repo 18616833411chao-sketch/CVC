@@ -1,0 +1,5 @@
+{
+  "name": "Copy of LinearInsight AI",
+  "description": "一款强大的浏览器端多元线性回归工具。上传 Excel 文件，配置变量（支持分类数据），即时可视化结果。具备由 Gemini 提供支持的 AI 模型解读功能。",
+  "requestFramePermissions": []
+}
