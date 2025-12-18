@@ -1,14 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
 import { RegressionResult } from "../types";
 
-const getClient = () => {
+export const analyzeRegression = async (result: RegressionResult, targetName: string): Promise<string> => {
     const apiKey = process.env.API_KEY;
     if (!apiKey) throw new Error("API Key not found in environment");
-    return new GoogleGenAI({ apiKey });
-};
-
-export const analyzeRegression = async (result: RegressionResult, targetName: string): Promise<string> => {
-    const client = getClient();
+    
+    // Always initialize with named parameter right before making the call
+    const ai = new GoogleGenAI({ apiKey });
     
     // Prepare a summarized prompt to avoid token limits with raw data
     const summary = {
@@ -46,8 +44,8 @@ export const analyzeRegression = async (result: RegressionResult, targetName: st
     `;
 
     try {
-        const response = await client.models.generateContent({
-            model: 'gemini-2.5-flash',
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
             contents: prompt,
         });
         
