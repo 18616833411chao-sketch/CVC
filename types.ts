@@ -50,6 +50,21 @@ export interface RegressionResult {
   robustness?: RobustnessMetrics[];
 }
 
+export interface ModelHistoryEntry {
+  id: string;
+  timestamp: number;
+  target: string;
+  features: VariableConfig[];
+  targetLogTransform: boolean;
+  targetLogPlusOne: boolean;
+  metrics: {
+    r2: number;
+    rmse: number;
+    adjustedR2: number;
+    observations: number;
+  };
+}
+
 export enum AppState {
   UPLOAD = 'UPLOAD',
   CONFIG = 'CONFIG',

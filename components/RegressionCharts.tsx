@@ -38,6 +38,17 @@ function normInv(p: number): number {
 const RegressionCharts: React.FC<Props> = ({ result, targetName }) => {
   const [useStandardized, setUseStandardized] = useState(false);
 
+  // Unified Tooltip Style
+  const TOOLTIP_STYLE = {
+    backgroundColor: '#ffffff',
+    border: '1px solid #e2e8f0',
+    borderRadius: '8px',
+    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -1px rgb(0 0 0 / 0.06)',
+    padding: '10px',
+    fontSize: '12px',
+    color: '#1e293b'
+  };
+
   // 1. Predicted vs Actual Data
   const predVsActualData = result.predictions.map((p, i) => ({
     x: Number(p.actual.toFixed(2)),
@@ -349,7 +360,7 @@ const RegressionCharts: React.FC<Props> = ({ result, targetName }) => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis type="number" dataKey="x" name="Actual" label={{ value: `实际值 (${targetName})`, position: 'bottom', offset: 0, fontSize: 12 }} tick={{fontSize: 10}} />
                 <YAxis type="number" dataKey="y" name="Predicted" label={{ value: '预测值', angle: -90, position: 'left', fontSize: 12 }} tick={{fontSize: 10}} />
-                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{fontSize: '12px'}} />
+                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={TOOLTIP_STYLE} />
                 <Scatter name="Observations" data={predVsActualData} fill="#3b82f6" fillOpacity={0.6} />
                 </ScatterChart>
             </ResponsiveContainer>
@@ -410,7 +421,7 @@ const RegressionCharts: React.FC<Props> = ({ result, targetName }) => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis type="number" dataKey="x" name="Theoretical" label={{ value: '理论分位数', position: 'bottom', offset: 0, fontSize: 12 }} tick={{fontSize: 10}} />
                 <YAxis type="number" dataKey="y" name="Standardized" label={{ value: '标准化残差', angle: -90, position: 'left', fontSize: 12 }} tick={{fontSize: 10}} />
-                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{fontSize: '12px'}} />
+                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={TOOLTIP_STYLE} />
                 <Scatter name="Q-Q" data={qqData} fill="#ec4899" fillOpacity={0.6} />
                 </ScatterChart>
             </ResponsiveContainer>
@@ -430,7 +441,7 @@ const RegressionCharts: React.FC<Props> = ({ result, targetName }) => {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis type="number" dataKey="x" name="Predicted" label={{ value: '预测值', position: 'bottom', offset: 0, fontSize: 12 }} tick={{fontSize: 10}} />
                 <YAxis type="number" dataKey="y" name="SqrtResiduals" label={{ value: '√|标准化残差|', angle: -90, position: 'left', fontSize: 12 }} tick={{fontSize: 10}} />
-                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{fontSize: '12px'}} />
+                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={TOOLTIP_STYLE} />
                 <Scatter name="Scale-Location" data={scaleLocationData} fill="#f59e0b" fillOpacity={0.6} />
                 </ScatterChart>
             </ResponsiveContainer>
@@ -451,7 +462,7 @@ const RegressionCharts: React.FC<Props> = ({ result, targetName }) => {
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                 <XAxis type="number" tick={{fontSize: 10}} />
                 <YAxis type="category" dataKey="name" width={120} tick={{fontSize: 11, fill: '#475569'}} interval={0} />
-                <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={TOOLTIP_STYLE} />
                 <ReferenceLine x={0} stroke="#94a3b8" />
                 <Bar dataKey="value" fill="#0ea5e9" radius={[0, 4, 4, 0]}>
                     <LabelList dataKey="value" position="right" formatter={(val: number) => val.toFixed(3)} fontSize={10} />
@@ -476,7 +487,7 @@ const RegressionCharts: React.FC<Props> = ({ result, targetName }) => {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="name" tick={{fontSize: 10, fill: '#475569'}} interval={0} angle={-45} textAnchor="end" height={60} />
                     <YAxis type="number" domain={[0, (max: number) => Math.max(max, 12)]} tick={{fontSize: 10}} label={{ value: 'VIF', angle: -90, position: 'insideLeft', fontSize: 10 }} />
-                    <Tooltip cursor={{fill: '#f1f5f9'}} />
+                    <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={TOOLTIP_STYLE} />
                     <ReferenceLine y={5} stroke="#f59e0b" strokeDasharray="5 5" />
                     <ReferenceLine y={10} stroke="#ef4444" strokeDasharray="3 3" />
                     <Bar dataKey="vif" radius={[4, 4, 0, 0]}>
@@ -551,7 +562,7 @@ const RegressionCharts: React.FC<Props> = ({ result, targetName }) => {
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                             <XAxis dataKey="name" tick={{fontSize: 10, fill: '#475569'}} interval={0} tickLine={false} />
                             <YAxis type="number" tick={{fontSize: 10}} label={{ value: targetName, angle: -90, position: 'insideLeft', fontSize: 10 }} />
-                            <Tooltip cursor={{fill: '#f1f5f9'}} />
+                            <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={TOOLTIP_STYLE} />
                             <Bar dataKey="rangeFull" barSize={2} fill="#94a3b8" radius={[2, 2, 2, 2]} />
                             <Bar dataKey="rangeBox" barSize={30} fill="#60a5fa" fillOpacity={0.7} radius={[2, 2, 2, 2]} />
                             <Scatter dataKey="median" fill="#1e3a8a" shape="circle" />
@@ -575,7 +586,7 @@ const RegressionCharts: React.FC<Props> = ({ result, targetName }) => {
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                         <XAxis type="number" tick={{fontSize: 10}} />
                         <YAxis type="category" dataKey="name" width={120} tick={{fontSize: 11, fill: '#475569'}} interval={0} />
-                        <Tooltip cursor={{fill: '#f1f5f9'}} />
+                        <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={TOOLTIP_STYLE} />
                         <ReferenceLine x={0} stroke="#94a3b8" />
                         <Bar dataKey="original" barSize={20} fill="#8b5cf6" fillOpacity={0.6}>
                             <ErrorBar dataKey="error" width={4} strokeWidth={2} stroke="#4c1d95" direction="x" />

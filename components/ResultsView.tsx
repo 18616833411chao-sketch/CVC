@@ -2,16 +2,17 @@ import React, { useState } from 'react';
 import { RegressionResult } from '../types';
 import RegressionCharts from './RegressionCharts';
 import { analyzeRegression } from '../services/geminiService';
-import { Bot, RefreshCw, Calculator, ArrowLeft, Info, HelpCircle, Star, CheckCircle2 } from 'lucide-react';
+import { Bot, RefreshCw, Calculator, ArrowLeft, Info, HelpCircle, Star, CheckCircle2, Settings2, FileUp } from 'lucide-react';
 import ReactMarkdown from 'react-markdown'; 
 
 interface Props {
   result: RegressionResult;
   targetName: string;
-  onReset: () => void;
+  onBackToConfig: () => void; // New prop: Back to configuration/cleaning
+  onUploadNew: () => void;    // New prop: Full reset/Upload new file
 }
 
-const ResultsView: React.FC<Props> = ({ result, targetName, onReset }) => {
+const ResultsView: React.FC<Props> = ({ result, targetName, onBackToConfig, onUploadNew }) => {
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
 
@@ -60,15 +61,27 @@ const ResultsView: React.FC<Props> = ({ result, targetName, onReset }) => {
   return (
     <div className="w-full max-w-7xl mx-auto pb-10">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">模型分析结果</h2>
           <p className="text-slate-500">目标变量: <span className="font-semibold text-blue-600">{targetName}</span></p>
         </div>
-        <button onClick={onReset} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors">
-          <ArrowLeft size={18} />
-          重新开始
-        </button>
+        <div className="flex items-center gap-3">
+            <button 
+                onClick={onUploadNew} 
+                className="flex items-center gap-2 px-4 py-2 text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-800 rounded-lg transition-colors text-sm font-medium shadow-sm"
+            >
+                <FileUp size={16} />
+                上传新文件
+            </button>
+            <button 
+                onClick={onBackToConfig} 
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium shadow-md active:scale-95"
+            >
+                <Settings2 size={16} />
+                调整变量配置
+            </button>
+        </div>
       </div>
 
       {/* KPI Cards with Tooltips */}

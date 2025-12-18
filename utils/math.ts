@@ -45,7 +45,7 @@ const inverse = (m: Matrix): Matrix => {
            break;
         }
       }
-      if (!swapped) throw new Error("奇异矩阵：变量之间可能存在完全共线性 (Multicollinearity)。");
+      if (!swapped) throw new Error("矩阵奇异 (Singular Matrix)");
     }
 
     // Scale row
@@ -229,6 +229,40 @@ export const performRegression = (
 
   if (cleanData.length === 0) throw new Error("过滤缺失值或无效对数变换数据后，没有剩余的有效数据行。请检查是否包含 0 或负数。");
 
+  // --- SAFETY CHECKS: Detect Multicollinearity Triggers BEFORE Matrix Ops ---
+  
+  // Check A: Constant Variables (Zero Variance)
+  // Constant variables are parallel to the Intercept, causing singularity.
+  featureVars.forEach(f => {
+    if (f.type === 'numeric') {
+        const values = cleanData.map(r => Number(r[f.name]));
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        // Using a small epsilon for floating point comparison
+        if (Math.abs(max - min) < 1e-9) {
+            throw new Error(`错误：变量 "${f.name}" 是常数（在所有选中行中值都相同）。常数变量与截距项冲突，会导致矩阵不可逆。请取消勾选该变量。`);
+        }
+    }
+  });
+
+  // Check B: Perfectly Identical Variables
+  for (let i = 0; i < featureVars.length; i++) {
+      for (let j = i + 1; j < featureVars.length; j++) {
+          const var1 = featureVars[i];
+          const var2 = featureVars[j];
+          if (var1.type === 'numeric' && var2.type === 'numeric') {
+              const vals1 = cleanData.map(r => Number(r[var1.name]));
+              const vals2 = cleanData.map(r => Number(r[var2.name]));
+              
+              // Quick check: sum and mean, then full comparison
+              const isIdentical = vals1.every((val, idx) => Math.abs(val - vals2[idx]) < 1e-9);
+              if (isIdentical) {
+                  throw new Error(`错误：变量 "${var1.name}" 和 "${var2.name}" 的数据完全相同。完全重复的变量会导致多重共线性。请移除其中一个。`);
+              }
+          }
+      }
+  }
+
   // Apply transformations to Y
   const Y: number[] = cleanData.map(row => {
     const val = Number(row[targetVar]);
@@ -244,6 +278,11 @@ export const performRegression = (
   const catLevels: Record<string, string[]> = {};
   catFeatures.forEach(f => {
     const uniqueValues = Array.from(new Set(cleanData.map(row => String(row[f.name])))).sort();
+    // Drop first level to avoid Dummy Variable Trap
+    if (uniqueValues.length <= 1) {
+        // Warning: Categorical variable has only 1 level. It effectively acts as a constant/intercept.
+        // But since we use uniqueValues.slice(1), it generates 0 columns, so it is mathematically safe, just useless.
+    }
     catLevels[f.name] = uniqueValues.slice(1);
   });
 
@@ -282,11 +321,15 @@ export const performRegression = (
   const n = Y.length;
   const k = featureNames.length;
 
-  if (n <= k) throw new Error(`样本量不足。观察值 (${n}) 必须多于模型参数 (${k})。`);
+  if (n <= k) {
+      throw new Error(`样本量不足。有效数据行数 (${n}) 必须多于模型参数数量 (${k}, 含截距)。请增加数据或减少变量。`);
+  }
 
   // 3. Matrix Math: Beta = (X'X)^-1 X'Y
   const Beta = solveOLS(X_raw, Y);
-  if (!Beta) throw new Error("无法对矩阵求逆。变量之间可能存在完美相关性 (Multicollinearity)。");
+  if (!Beta) {
+      throw new Error("数学计算错误：无法对矩阵求逆。这通常是因为变量之间存在完美的相关性（例如 A=2B，或 A+B=C）。请尝试移除高度相关的变量。");
+  }
 
   // 4. Calculate Statistics (Main Model)
   const predictions = X_raw.map((row, i) => {
@@ -326,7 +369,7 @@ export const performRegression = (
   try {
      XTX_inv = inverse(XTX);
   } catch(e) {
-     throw new Error("Singular Matrix");
+     throw new Error("Singular Matrix during Standard Error calculation");
   }
 
   const varBeta = XTX_inv.map(row => row.map(val => val * mse));

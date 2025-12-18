@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { VariableConfig, DataRow } from '../types';
-import { Settings2, ArrowRight, Trash2, Wand2, Calculator, AlertCircle, CheckSquare, Square, X, ChevronLeft, ChevronRight, Plus, FlaskConical, Copy } from 'lucide-react';
+import { VariableConfig, DataRow, ModelHistoryEntry } from '../types';
+import { Settings2, ArrowRight, Trash2, Wand2, Calculator, AlertCircle, CheckSquare, Square, X, ChevronLeft, ChevronRight, Plus, FlaskConical, Copy, FilterX, History, Clock, ArrowUpRight, Download, Upload } from 'lucide-react';
 
 interface Props {
   data: DataRow[];
   headers: string[];
+  history: ModelHistoryEntry[];
   onConfigComplete: (target: string, features: VariableConfig[], selectedData: DataRow[], targetLogTransform: boolean, targetLogPlusOne: boolean) => void;
   onBack: () => void;
+  onImportHistory: (history: ModelHistoryEntry[]) => void;
 }
 
 const ROWS_PER_PAGE = 20;
 
-const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, onBack }) => {
+const VariableSelector: React.FC<Props> = ({ data, headers, history, onConfigComplete, onBack, onImportHistory }) => {
   // Data State (Augmented allows adding new columns)
   const [localData, setLocalData] = useState<DataRow[]>([]);
   const [localHeaders, setLocalHeaders] = useState<string[]>([]);
@@ -29,6 +31,12 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
   const [feVar1, setFeVar1] = useState<string>('');
   const [feVar2, setFeVar2] = useState<string>('');
   const [feType, setFeType] = useState<'interaction' | 'squared'>('interaction');
+  
+  // Feature Engineering Transformation Options
+  const [feVar1Log, setFeVar1Log] = useState(false);
+  const [feVar1PlusOne, setFeVar1PlusOne] = useState(false);
+  const [feVar2Log, setFeVar2Log] = useState(false);
+  const [feVar2PlusOne, setFeVar2PlusOne] = useState(false);
 
   // Row selection state (indices)
   const [selectedRowIndices, setSelectedRowIndices] = useState<Set<number>>(new Set());
@@ -38,6 +46,9 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
   const [showOutlierModal, setShowOutlierModal] = useState(false);
   const [outlierCols, setOutlierCols] = useState<Set<string>>(new Set());
   const [zScoreThreshold, setZScoreThreshold] = useState<number>(3);
+
+  // History Modal State
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   // Validation Error
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -57,8 +68,11 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
   // Auto-select logic
   useEffect(() => {
     if (localHeaders.length > 0 && !target) {
-      // Priority: Columns containing "投资收益率" > Last Column
-      const preferredTarget = localHeaders.find(h => h.includes("投资收益率")) || localHeaders[localHeaders.length - 1];
+      // Priority: "投资回报率" > "投资收益率" > Last Column
+      const preferredTarget = localHeaders.find(h => h === "投资回报率") || 
+                              localHeaders.find(h => h.includes("投资回报率")) || 
+                              localHeaders.find(h => h.includes("投资收益率")) || 
+                              localHeaders[localHeaders.length - 1];
       setTarget(preferredTarget);
       
       const newFeatures = new Set(localHeaders.filter(h => h !== preferredTarget));
@@ -151,22 +165,54 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
   const handleAddFeature = () => {
       if (!feVar1) return;
       
+      // Helper to calculate transformed value
+      const getTransformedVal = (val: any, isLog: boolean, isPlusOne: boolean) => {
+          let num = Number(val);
+          if (isNaN(num)) return NaN;
+          
+          if (isPlusOne) num += 1;
+          if (isLog) {
+              if (num <= 0) return NaN; // Log invalid
+              num = Math.log(num);
+          }
+          return num;
+      };
+
+      // Helper to generate name part
+      const getNamePart = (name: string, isLog: boolean, isPlusOne: boolean) => {
+          let prefix = "";
+          if (isLog) prefix = isPlusOne ? "ln1p" : "ln";
+          else if (isPlusOne) prefix = "plus1";
+          
+          return prefix ? `${prefix}(${name})` : name;
+      };
+
+      const name1 = getNamePart(feVar1, feVar1Log, feVar1PlusOne);
       let newColName = '';
       let newData: DataRow[] = [];
 
       if (feType === 'squared') {
-          newColName = `${feVar1}^2`;
-          newData = localData.map(row => ({
-              ...row,
-              [newColName]: Number(row[feVar1]) * Number(row[feVar1])
-          }));
+          newColName = `${name1}^2`;
+          newData = localData.map(row => {
+              const val1 = getTransformedVal(row[feVar1], feVar1Log, feVar1PlusOne);
+              return {
+                ...row,
+                [newColName]: isNaN(val1) ? null : val1 * val1
+              };
+          });
       } else {
           if (!feVar2) return;
-          newColName = `${feVar1}_x_${feVar2}`;
-          newData = localData.map(row => ({
-              ...row,
-              [newColName]: Number(row[feVar1]) * Number(row[feVar2])
-          }));
+          const name2 = getNamePart(feVar2, feVar2Log, feVar2PlusOne);
+          newColName = `${name1}_x_${name2}`;
+          
+          newData = localData.map(row => {
+              const val1 = getTransformedVal(row[feVar1], feVar1Log, feVar1PlusOne);
+              const val2 = getTransformedVal(row[feVar2], feVar2Log, feVar2PlusOne);
+              return {
+                  ...row,
+                  [newColName]: (isNaN(val1) || isNaN(val2)) ? null : val1 * val2
+              };
+          });
       }
 
       if (localHeaders.includes(newColName)) {
@@ -182,8 +228,13 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
       newFeatures.add(newColName);
       setFeatures(newFeatures);
 
+      // Reset selection but keep type for convenience
       setFeVar1('');
       setFeVar2('');
+      setFeVar1Log(false);
+      setFeVar1PlusOne(false);
+      setFeVar2Log(false);
+      setFeVar2PlusOne(false);
   };
 
   // --- Outlier Logic ---
@@ -257,9 +308,6 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
       let duplicateCount = 0;
 
       localData.forEach((row, idx) => {
-          // Check only selected rows or all? Usually we check only duplicates among selected to keep selection clean.
-          // But here we want to ensure uniqueness in the final dataset.
-          
           if (newSelected.has(idx)) {
               // Create a signature based on all column values
               const signature = JSON.stringify(localHeaders.map(h => row[h]));
@@ -282,6 +330,50 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
       setTimeout(() => setOutlierMessage(null), 5000);
   };
 
+  // Clean Dirty Data Logic (Remove rows with non-numeric values in numeric columns)
+  const handleCleanDirtyData = () => {
+    const newSelected = new Set(selectedRowIndices);
+    let dirtyCount = 0;
+
+    // Identify numeric columns: Target (if not cat) and Features (if not cat)
+    const numericCols = new Set<string>();
+    if (target && !catVars.has(target)) numericCols.add(target);
+    features.forEach(f => {
+      if (!catVars.has(f)) numericCols.add(f);
+    });
+
+    if (numericCols.size === 0) {
+      setOutlierMessage("请先配置目标变量或特征变量。");
+      setTimeout(() => setOutlierMessage(null), 3000);
+      return;
+    }
+
+    localData.forEach((row, idx) => {
+      if (newSelected.has(idx)) {
+        let isDirty = false;
+        for (const col of numericCols) {
+          const val = row[col];
+          // Check for empty strings, null, undefined, or NaN after conversion
+          if (val === null || val === undefined || val === '' || isNaN(Number(val))) {
+            isDirty = true;
+            break;
+          }
+        }
+        if (isDirty) {
+          newSelected.delete(idx);
+          dirtyCount++;
+        }
+      }
+    });
+
+    setSelectedRowIndices(newSelected);
+    setOutlierMessage(dirtyCount > 0 
+      ? `清理完成：已自动取消勾选 ${dirtyCount} 条包含非数字内容或空值的记录。` 
+      : "在选定的数值列中未发现脏数据。");
+    
+    setTimeout(() => setOutlierMessage(null), 5000);
+  };
+
   const handleClearAll = () => {
     setTarget('');
     setFeatures(new Set());
@@ -294,6 +386,195 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
     // Reset Data to original
     setLocalData(data);
     setLocalHeaders(headers);
+  };
+
+  // History Restoration
+  const handleRestoreHistory = (entry: ModelHistoryEntry) => {
+      let restoredData = [...localData];
+      let restoredHeaders = [...localHeaders];
+      
+      // Helper to parse term
+      const parseTerm = (term: string) => {
+          if (term.startsWith('ln1p(') && term.endsWith(')')) return { name: term.slice(5, -1), log: true, plus1: true };
+          if (term.startsWith('ln(') && term.endsWith(')')) return { name: term.slice(3, -1), log: true, plus1: false };
+          if (term.startsWith('plus1(') && term.endsWith(')')) return { name: term.slice(6, -1), log: false, plus1: true };
+          return { name: term, log: false, plus1: false };
+      };
+
+      // Helper to compute value
+      const computeVal = (row: DataRow, def: {name: string, log: boolean, plus1: boolean}) => {
+           let val = Number(row[def.name]);
+           if (isNaN(val)) return NaN;
+           if (def.plus1) val += 1;
+           if (def.log) {
+               if (val <= 0) return NaN;
+               val = Math.log(val);
+           }
+           return val;
+      };
+
+      // Identify required columns from history (features + target)
+      const requiredCols = new Set<string>();
+      entry.features.forEach(f => requiredCols.add(f.name));
+      if (entry.target) requiredCols.add(entry.target);
+
+      // Iterative reconstruction
+      let missingCols = Array.from(requiredCols).filter(c => !restoredHeaders.includes(c));
+      let changed = true;
+      let iterations = 0;
+
+      while (changed && missingCols.length > 0 && iterations < 5) {
+          changed = false;
+          const stillMissing: string[] = [];
+
+          for (const col of missingCols) {
+              let reconstructed = false;
+
+              // 1. Try Squared: "term^2"
+              if (col.endsWith('^2')) {
+                  const base = col.slice(0, -2);
+                  const def = parseTerm(base);
+                  if (restoredHeaders.includes(def.name)) {
+                      restoredData = restoredData.map(row => {
+                          const v = computeVal(row, def);
+                          return { ...row, [col]: isNaN(v) ? null : v * v };
+                      });
+                      restoredHeaders.push(col);
+                      reconstructed = true;
+                  }
+              }
+              
+              // 2. Try Interaction: "term1_x_term2"
+              if (!reconstructed && col.includes('_x_')) {
+                   // Heuristic: iterate possible split points of `_x_` to find parents
+                   const splitIndices: number[] = [];
+                   let idx = col.indexOf('_x_');
+                   while (idx !== -1) {
+                       splitIndices.push(idx);
+                       idx = col.indexOf('_x_', idx + 1);
+                   }
+                   
+                   for (const splitIdx of splitIndices) {
+                       const leftRaw = col.substring(0, splitIdx);
+                       const rightRaw = col.substring(splitIdx + 3);
+                       
+                       const def1 = parseTerm(leftRaw);
+                       const def2 = parseTerm(rightRaw);
+                       
+                       if (restoredHeaders.includes(def1.name) && restoredHeaders.includes(def2.name)) {
+                           restoredData = restoredData.map(row => {
+                              const v1 = computeVal(row, def1);
+                              const v2 = computeVal(row, def2);
+                              return { ...row, [col]: (isNaN(v1) || isNaN(v2)) ? null : v1 * v2 };
+                           });
+                           restoredHeaders.push(col);
+                           reconstructed = true;
+                           break; // Found the parents
+                       }
+                   }
+              }
+
+              if (reconstructed) {
+                  changed = true;
+              } else {
+                  stillMissing.push(col);
+              }
+          }
+          missingCols = stillMissing;
+          iterations++;
+      }
+      
+      // Update data state
+      setLocalData(restoredData);
+      setLocalHeaders(restoredHeaders);
+
+      // Now proceed with variable selection logic
+      // 1. Restore Target
+      setTarget(entry.target);
+      setTargetLog(entry.targetLogTransform);
+      setTargetLogPlusOne(entry.targetLogPlusOne);
+
+      // 2. Restore Features
+      const newFeatures = new Set<string>();
+      const newCatVars = new Set<string>();
+      const newLogVars = new Set<string>();
+      const newLogPlusOneVars = new Set<string>();
+      const missingVars: string[] = [];
+
+      entry.features.forEach(f => {
+          if (restoredHeaders.includes(f.name)) { // Check against updated headers
+              newFeatures.add(f.name);
+              if (f.type === 'categorical') newCatVars.add(f.name);
+              if (f.logTransform) newLogVars.add(f.name);
+              if (f.logPlusOne) newLogPlusOneVars.add(f.name);
+          } else {
+              missingVars.push(f.name);
+          }
+      });
+
+      setFeatures(newFeatures);
+      setCatVars(newCatVars);
+      setLogVars(newLogVars);
+      setLogPlusOneVars(newLogPlusOneVars);
+      
+      setShowHistoryModal(false);
+      setValidationError(null);
+
+      if (missingVars.length > 0) {
+          setOutlierMessage(`恢复部分完成。以下变量无法重建（可能缺少基础数据）：${missingVars.join(', ')}`);
+          setTimeout(() => setOutlierMessage(null), 6000);
+      } else {
+          setOutlierMessage("已成功加载历史模型配置。");
+          setTimeout(() => setOutlierMessage(null), 3000);
+      }
+  };
+
+  // Export History Logic
+  const handleExportHistory = () => {
+      if (history.length === 0) {
+          alert("暂无历史记录可导出。");
+          return;
+      }
+      const dataStr = JSON.stringify(history, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `linear_insight_history_${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+  };
+
+  // Import History Logic
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+          try {
+              const content = event.target?.result as string;
+              const json = JSON.parse(content);
+              
+              // Basic validation: must be an array
+              if (Array.isArray(json)) {
+                  // Pass to App to overwrite history
+                  onImportHistory(json);
+                  alert(`成功导入 ${json.length} 条历史配置记录。`);
+                  // Keep modal open to show new data
+              } else {
+                  alert("导入失败：文件格式错误，内容必须是历史记录列表。");
+              }
+          } catch (err) {
+              console.error(err);
+              alert("导入失败：无法解析 JSON 文件。");
+          }
+      };
+      reader.readAsText(file);
+      // Reset input so same file can be selected again
+      e.target.value = '';
   };
 
   const handleRun = () => {
@@ -313,7 +594,7 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
         });
         
         if (hasBadData) {
-            setValidationError(`错误：列 "${field}" 被配置为数值变量，但包含文本数据。请将其设为“分类变量”或清理数据。`);
+            setValidationError(`错误：列 "${field}" 被配置为数值变量，但包含文本数据。请将其设为“分类变量”或使用“去除脏数据”功能。`);
             window.scrollTo({ top: 0, behavior: 'smooth' });
             return;
         }
@@ -370,13 +651,23 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
             <Settings2 className="text-blue-600" />
             <h2 className="text-xl font-bold text-slate-800">模型变量配置</h2>
           </div>
-          <button 
-            onClick={handleClearAll}
-            className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors font-medium"
-          >
-            <Trash2 size={16} />
-            重置所有配置
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+                onClick={() => setShowHistoryModal(true)}
+                className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-blue-700 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-colors font-medium border border-slate-200"
+            >
+                <History size={16} />
+                历史模型
+                {history.length > 0 && <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded-full">{history.length}</span>}
+            </button>
+            <button 
+                onClick={handleClearAll}
+                className="flex items-center gap-1.5 text-sm text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors font-medium"
+            >
+                <Trash2 size={16} />
+                重置配置
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -520,7 +811,7 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
             <h3 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
                 <FlaskConical className="text-purple-600" size={20} />
                 特征工程 (Feature Engineering)
-                <span className="text-xs font-normal text-slate-400">通过创建组合变量来提高模型拟合度 (R²)</span>
+                <span className="text-xs font-normal text-slate-400">通过创建组合变量来提高模型拟合度 (R²) - 变换基于原始数据独立计算</span>
             </h3>
             <div className="bg-purple-50 rounded-lg p-4 border border-purple-100 flex flex-wrap items-end gap-3">
                  <div className="flex-1 min-w-[150px]">
@@ -535,18 +826,30 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
                     </select>
                  </div>
                  
-                 <div className="flex-1 min-w-[150px]">
+                 <div className="flex-[1.5] min-w-[220px]">
                     <label className="block text-xs font-medium text-purple-800 mb-1">变量 A</label>
-                    <select 
-                        value={feVar1}
-                        onChange={(e) => setFeVar1(e.target.value)}
-                        className="w-full text-sm border-purple-200 rounded-md focus:ring-purple-500 focus:border-purple-500 bg-white"
-                    >
-                        <option value="">选择变量...</option>
-                        {localHeaders.filter(h => h !== target && !catVars.has(h)).map(h => (
-                            <option key={h} value={h}>{h}</option>
-                        ))}
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select 
+                          value={feVar1}
+                          onChange={(e) => setFeVar1(e.target.value)}
+                          className="flex-grow text-sm border-purple-200 rounded-md focus:ring-purple-500 focus:border-purple-500 bg-white"
+                      >
+                          <option value="">选择变量...</option>
+                          {localHeaders.filter(h => h !== target && !catVars.has(h)).map(h => (
+                              <option key={h} value={h}>{h}</option>
+                          ))}
+                      </select>
+                      <div className="flex items-center gap-1 bg-white px-2 py-1.5 rounded border border-purple-100">
+                         <label className="flex items-center gap-1 cursor-pointer" title="应用对数">
+                            <input type="checkbox" checked={feVar1Log} onChange={e => setFeVar1Log(e.target.checked)} className="rounded text-purple-600 w-3.5 h-3.5" />
+                            <span className="text-[10px] text-purple-700 font-bold">Ln</span>
+                         </label>
+                         <label className="flex items-center gap-1 cursor-pointer" title="加 1 (常用于处理0值)">
+                            <input type="checkbox" checked={feVar1PlusOne} onChange={e => setFeVar1PlusOne(e.target.checked)} className="rounded text-purple-600 w-3.5 h-3.5" />
+                            <span className="text-[10px] text-purple-700 font-bold">+1</span>
+                         </label>
+                      </div>
+                    </div>
                  </div>
 
                  {feType === 'interaction' && (
@@ -554,18 +857,30 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
                         <div className="flex items-center pb-2 text-purple-400">
                             <X size={16} />
                         </div>
-                        <div className="flex-1 min-w-[150px]">
+                        <div className="flex-[1.5] min-w-[220px]">
                             <label className="block text-xs font-medium text-purple-800 mb-1">变量 B</label>
-                            <select 
-                                value={feVar2}
-                                onChange={(e) => setFeVar2(e.target.value)}
-                                className="w-full text-sm border-purple-200 rounded-md focus:ring-purple-500 focus:border-purple-500 bg-white"
-                            >
-                                <option value="">选择变量...</option>
-                                {localHeaders.filter(h => h !== target && !catVars.has(h)).map(h => (
-                                    <option key={h} value={h}>{h}</option>
-                                ))}
-                            </select>
+                            <div className="flex items-center gap-2">
+                                <select 
+                                    value={feVar2}
+                                    onChange={(e) => setFeVar2(e.target.value)}
+                                    className="flex-grow text-sm border-purple-200 rounded-md focus:ring-purple-500 focus:border-purple-500 bg-white"
+                                >
+                                    <option value="">选择变量...</option>
+                                    {localHeaders.filter(h => h !== target && !catVars.has(h)).map(h => (
+                                        <option key={h} value={h}>{h}</option>
+                                    ))}
+                                </select>
+                                <div className="flex items-center gap-1 bg-white px-2 py-1.5 rounded border border-purple-100">
+                                  <label className="flex items-center gap-1 cursor-pointer" title="应用对数">
+                                      <input type="checkbox" checked={feVar2Log} onChange={e => setFeVar2Log(e.target.checked)} className="rounded text-purple-600 w-3.5 h-3.5" />
+                                      <span className="text-[10px] text-purple-700 font-bold">Ln</span>
+                                  </label>
+                                  <label className="flex items-center gap-1 cursor-pointer" title="加 1 (常用于处理0值)">
+                                      <input type="checkbox" checked={feVar2PlusOne} onChange={e => setFeVar2PlusOne(e.target.checked)} className="rounded text-purple-600 w-3.5 h-3.5" />
+                                      <span className="text-[10px] text-purple-700 font-bold">+1</span>
+                                  </label>
+                                </div>
+                            </div>
                         </div>
                      </>
                  )}
@@ -608,6 +923,14 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
                >
                    <Copy size={16} />
                    去除重复项
+               </button>
+               <button 
+                onClick={handleCleanDirtyData}
+                className="flex items-center gap-1 text-xs bg-white hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300 px-3 py-1.5 rounded transition-colors shadow-sm"
+                title="去除选定数值列中包含非数字、空值的行"
+               >
+                   <FilterX size={16} />
+                   去除脏数据
                </button>
                <button 
                 onClick={openOutlierModal}
@@ -781,6 +1104,105 @@ const VariableSelector: React.FC<Props> = ({ data, headers, onConfigComplete, on
                     >
                         执行检测
                     </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-slate-900/50 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden animate-fadeIn flex flex-col max-h-[80vh]">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <div className="flex items-center gap-4">
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                            <History size={18} className="text-blue-600" />
+                            历史模型配置记录
+                        </h3>
+                        <div className="flex items-center gap-2">
+                             <button 
+                                onClick={handleExportHistory}
+                                className="flex items-center gap-1 text-xs px-2 py-1 bg-white border border-slate-300 rounded text-slate-600 hover:text-blue-600 hover:border-blue-300 transition-colors"
+                                title="将所有历史记录导出为 JSON 文件"
+                             >
+                                 <Download size={12} />
+                                 导出记录
+                             </button>
+                             <label 
+                                className="flex items-center gap-1 text-xs px-2 py-1 bg-white border border-slate-300 rounded text-slate-600 hover:text-blue-600 hover:border-blue-300 transition-colors cursor-pointer"
+                                title="导入 JSON 文件并覆盖当前历史记录"
+                             >
+                                 <Upload size={12} />
+                                 导入记录
+                                 <input type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+                             </label>
+                        </div>
+                    </div>
+                    <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600">
+                        <X size={20} />
+                    </button>
+                </div>
+                
+                <div className="p-4 overflow-y-auto custom-scrollbar flex-grow bg-slate-50/30">
+                    {history.length === 0 ? (
+                        <div className="text-center py-10 text-slate-400 flex flex-col items-center">
+                            <Clock size={40} className="mb-3 opacity-30" />
+                            <p>暂无历史运行记录</p>
+                            <p className="text-xs mt-1">成功运行模型后，记录将自动保存在此处。</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {history.map((entry) => (
+                                <div key={entry.id} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200 transition-all group">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs font-mono rounded">
+                                                {new Date(entry.timestamp).toLocaleTimeString()}
+                                            </span>
+                                            <span className="font-bold text-slate-700">{entry.target}</span>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleRestoreHistory(entry)}
+                                            className="text-xs flex items-center gap-1 text-blue-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 px-2 py-1 rounded hover:bg-blue-100"
+                                        >
+                                            <ArrowUpRight size={14} />
+                                            加载配置
+                                        </button>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-4 gap-4 text-sm mb-3">
+                                        <div>
+                                            <p className="text-xs text-slate-400">R² (拟合度)</p>
+                                            <p className={`font-mono font-bold ${entry.metrics.r2 > 0.7 ? 'text-emerald-600' : 'text-slate-700'}`}>
+                                                {entry.metrics.r2.toFixed(4)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-slate-400">RMSE</p>
+                                            <p className="font-mono text-slate-700">{entry.metrics.rmse.toFixed(4)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-slate-400">样本量</p>
+                                            <p className="font-mono text-slate-700">{entry.metrics.observations}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-slate-400">特征数量</p>
+                                            <p className="font-mono text-slate-700">{entry.features.length}</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="text-xs text-slate-500 border-t border-slate-50 pt-2 flex flex-wrap gap-1">
+                                        <span className="text-slate-400 mr-1">特征:</span>
+                                        {entry.features.map(f => (
+                                            <span key={f.name} className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600" title={f.name}>
+                                                {f.name}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import DataUploader from './components/DataUploader';
 import VariableSelector from './components/VariableSelector';
 import ResultsView from './components/ResultsView';
-import { AppState, DataRow, VariableConfig, RegressionResult } from './types';
+import { AppState, DataRow, VariableConfig, RegressionResult, ModelHistoryEntry } from './types';
 import { performRegression } from './utils/math';
 import { Activity, AlertTriangle } from 'lucide-react';
 
@@ -13,6 +13,9 @@ const App: React.FC = () => {
   const [targetVar, setTargetVar] = useState<string>('');
   const [regressionResult, setRegressionResult] = useState<RegressionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // History State
+  const [history, setHistory] = useState<ModelHistoryEntry[]>([]);
 
   const handleDataLoaded = (loadedData: DataRow[], loadedHeaders: string[]) => {
     setData(loadedData);
@@ -34,6 +37,24 @@ const App: React.FC = () => {
       // Use the filtered data passed from VariableSelector
       const result = performRegression(filteredData, target, features, targetLogTransform, targetLogPlusOne);
       setRegressionResult(result);
+      
+      // Save to History
+      const newHistoryItem: ModelHistoryEntry = {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        target,
+        features,
+        targetLogTransform,
+        targetLogPlusOne,
+        metrics: {
+          r2: result.r2,
+          adjustedR2: result.adjustedR2,
+          rmse: result.rmse,
+          observations: result.observations
+        }
+      };
+      setHistory(prev => [newHistoryItem, ...prev]);
+
       setCurrentState(AppState.RESULTS);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
@@ -49,12 +70,18 @@ const App: React.FC = () => {
     setTargetVar('');
     setRegressionResult(null);
     setError(null);
+    // history is kept unless explicitly cleared by user or new import
     setCurrentState(AppState.UPLOAD);
   };
 
   const handleBackToConfig = () => {
     setError(null);
+    setRegressionResult(null); // Clear previous result to ensure clean state
     setCurrentState(AppState.CONFIG);
+  };
+
+  const handleImportHistory = (importedHistory: ModelHistoryEntry[]) => {
+      setHistory(importedHistory);
   };
 
   return (
@@ -71,7 +98,7 @@ const App: React.FC = () => {
             </div>
             <div className="flex items-center">
               <span className="px-3 py-1 bg-slate-100 rounded-full text-xs font-medium text-slate-500">
-                v1.2.0
+                v1.2.2
               </span>
             </div>
           </div>
@@ -104,8 +131,10 @@ const App: React.FC = () => {
              <VariableSelector 
                data={data}
                headers={headers} 
+               history={history}
                onConfigComplete={handleConfigComplete} 
                onBack={handleReset}
+               onImportHistory={handleImportHistory}
              />
           </div>
         )}
@@ -115,7 +144,8 @@ const App: React.FC = () => {
             <ResultsView 
               result={regressionResult} 
               targetName={targetVar} 
-              onReset={handleReset}
+              onBackToConfig={handleBackToConfig}
+              onUploadNew={handleReset}
             />
           </div>
         )}
