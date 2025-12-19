@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { VariableConfig, DataRow, ModelHistoryEntry } from '../types';
-import { Settings2, ArrowRight, Trash2, Wand2, Calculator, AlertCircle, CheckSquare, Square, X, ChevronLeft, ChevronRight, Plus, FlaskConical, Copy, FilterX, History, Clock, ArrowUpRight, Download, Upload } from 'lucide-react';
+import { Settings2, ArrowRight, Trash2, Wand2, Calculator, AlertCircle, CheckSquare, Square, X, ChevronLeft, ChevronRight, Plus, FlaskConical, Copy, FilterX, History, Clock, ArrowUpRight, Download, Upload, FileDown } from 'lucide-react';
 
 interface Props {
   data: DataRow[];
@@ -372,6 +373,29 @@ const VariableSelector: React.FC<Props> = ({ data, headers, history, onConfigCom
       : "在选定的数值列中未发现脏数据。");
     
     setTimeout(() => setOutlierMessage(null), 5000);
+  };
+
+  // Download Data Logic
+  const handleDownloadData = () => {
+    if (selectedRowIndices.size === 0) {
+        alert("没有选中的数据可供下载。");
+        return;
+    }
+
+    const exportData = localData
+        .filter((_, idx) => selectedRowIndices.has(idx))
+        .map(row => {
+            const newRow: any = {};
+            localHeaders.forEach(h => {
+                newRow[h] = row[h];
+            });
+            return newRow;
+        });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "CleanedData");
+    XLSX.writeFile(wb, `linear_insight_data_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
   const handleClearAll = () => {
@@ -916,6 +940,14 @@ const VariableSelector: React.FC<Props> = ({ data, headers, history, onConfigCom
                        {outlierMessage}
                    </span>
                )}
+               <button 
+                onClick={handleDownloadData}
+                className="flex items-center gap-1 text-xs bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-200 hover:border-emerald-300 px-3 py-1.5 rounded transition-colors shadow-sm"
+                title="导出当前选中的数据（包含生成的特征）为 Excel"
+               >
+                   <FileDown size={16} />
+                   导出表格
+               </button>
                <button 
                 onClick={handleRemoveDuplicates}
                 className="flex items-center gap-1 text-xs bg-white hover:bg-blue-50 text-blue-600 border border-blue-200 hover:border-blue-300 px-3 py-1.5 rounded transition-colors shadow-sm"
