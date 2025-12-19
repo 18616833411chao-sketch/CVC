@@ -16,6 +16,9 @@ const App: React.FC = () => {
   
   // History State
   const [history, setHistory] = useState<ModelHistoryEntry[]>([]);
+  
+  // Suggested Config State (from AI)
+  const [suggestedConfig, setSuggestedConfig] = useState<ModelHistoryEntry | null>(null);
 
   const handleDataLoaded = (loadedData: DataRow[], loadedHeaders: string[]) => {
     setData(loadedData);
@@ -70,6 +73,7 @@ const App: React.FC = () => {
     setTargetVar('');
     setRegressionResult(null);
     setError(null);
+    setSuggestedConfig(null);
     // history is kept unless explicitly cleared by user or new import
     setCurrentState(AppState.UPLOAD);
   };
@@ -78,6 +82,12 @@ const App: React.FC = () => {
     setError(null);
     setRegressionResult(null); // Clear previous result to ensure clean state
     setCurrentState(AppState.CONFIG);
+  };
+
+  const handleApplySuggestion = (config: ModelHistoryEntry) => {
+      setSuggestedConfig(config);
+      setRegressionResult(null);
+      setCurrentState(AppState.CONFIG);
   };
 
   const handleImportHistory = (importedHistory: ModelHistoryEntry[]) => {
@@ -98,7 +108,7 @@ const App: React.FC = () => {
             </div>
             <div className="flex items-center">
               <span className="px-3 py-1 bg-slate-100 rounded-full text-xs font-medium text-slate-500">
-                v1.2.2
+                v1.3.0
               </span>
             </div>
           </div>
@@ -135,6 +145,8 @@ const App: React.FC = () => {
                onConfigComplete={handleConfigComplete} 
                onBack={handleReset}
                onImportHistory={handleImportHistory}
+               suggestedConfig={suggestedConfig}
+               onSuggestionLoaded={() => setSuggestedConfig(null)}
              />
           </div>
         )}
@@ -146,6 +158,7 @@ const App: React.FC = () => {
               targetName={targetVar} 
               onBackToConfig={handleBackToConfig}
               onUploadNew={handleReset}
+              onApplySuggestion={handleApplySuggestion}
             />
           </div>
         )}

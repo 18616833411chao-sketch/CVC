@@ -1,26 +1,76 @@
 import React, { useState } from 'react';
-import { RegressionResult } from '../types';
+import { RegressionResult, ModelHistoryEntry } from '../types';
 import RegressionCharts from './RegressionCharts';
 import { analyzeRegression } from '../services/geminiService';
-import { Bot, RefreshCw, Calculator, ArrowLeft, Info, HelpCircle, Star, CheckCircle2, Settings2, FileUp } from 'lucide-react';
+import { Bot, RefreshCw, Calculator, ArrowLeft, Info, HelpCircle, Star, CheckCircle2, Settings2, FileUp, Sparkles, Download, ArrowRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown'; 
 
 interface Props {
   result: RegressionResult;
   targetName: string;
-  onBackToConfig: () => void; // New prop: Back to configuration/cleaning
-  onUploadNew: () => void;    // New prop: Full reset/Upload new file
+  onBackToConfig: () => void;
+  onUploadNew: () => void;
+  onApplySuggestion: (config: ModelHistoryEntry) => void; // New Prop
 }
 
-const ResultsView: React.FC<Props> = ({ result, targetName, onBackToConfig, onUploadNew }) => {
-  const [analysis, setAnalysis] = useState<string | null>(null);
+const ResultsView: React.FC<Props> = ({ result, targetName, onBackToConfig, onUploadNew, onApplySuggestion }) => {
+  const [analysisText, setAnalysisText] = useState<string | null>(null);
+  const [suggestedConfig, setSuggestedConfig] = useState<ModelHistoryEntry | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
 
   const handleAIAnalysis = async () => {
     setLoadingAI(true);
-    const text = await analyzeRegression(result, targetName);
-    setAnalysis(text);
+    setSuggestedConfig(null);
+    setAnalysisText(null);
+
+    const fullText = await analyzeRegression(result, targetName);
+    
+    // Attempt to extract JSON block
+    const jsonMatch = fullText.match(/```json\s*([\s\S]*?)\s*```/);
+    let config: ModelHistoryEntry | null = null;
+    let textToDisplay = fullText;
+
+    if (jsonMatch) {
+        try {
+            const jsonStr = jsonMatch[1];
+            const parsed = JSON.parse(jsonStr);
+            
+            // Construct a valid ModelHistoryEntry (filling in dummies for ID/metrics)
+            config = {
+                id: crypto.randomUUID(),
+                timestamp: Date.now(),
+                target: parsed.target || targetName,
+                features: parsed.features || [],
+                targetLogTransform: parsed.targetLogTransform || false,
+                targetLogPlusOne: parsed.targetLogPlusOne || false,
+                metrics: { r2: 0, rmse: 0, adjustedR2: 0, observations: 0 } // Dummy metrics
+            };
+
+            // Remove the JSON block from display text to keep it clean
+            textToDisplay = fullText.replace(jsonMatch[0], '').trim();
+        } catch (e) {
+            console.error("Failed to parse AI suggestion JSON", e);
+        }
+    }
+
+    setAnalysisText(textToDisplay);
+    setSuggestedConfig(config);
     setLoadingAI(false);
+  };
+
+  const handleExportSuggestion = () => {
+      if (!suggestedConfig) return;
+      // We export it as a single item list so it's compatible with the import format
+      const dataStr = JSON.stringify([suggestedConfig], null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `ai_suggestion_${targetName}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
   };
 
   const metrics = [
@@ -194,7 +244,7 @@ const ResultsView: React.FC<Props> = ({ result, targetName, onBackToConfig, onUp
                             </div>
                         </div>
                         
-                        {!analysis && !loadingAI && (
+                        {!analysisText && !loadingAI && (
                             <button 
                                 onClick={handleAIAnalysis}
                                 className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md hover:shadow-lg transition-all flex items-center gap-2 transform active:scale-95"
@@ -205,7 +255,7 @@ const ResultsView: React.FC<Props> = ({ result, targetName, onBackToConfig, onUp
                         )}
                     </div>
                     
-                    {!analysis && !loadingAI && (
+                    {!analysisText && !loadingAI && (
                         <div className="bg-slate-50 rounded-lg border border-slate-100 p-8 text-center">
                             <Bot size={48} className="mx-auto text-slate-300 mb-4" />
                             <h4 className="text-slate-600 font-medium mb-2">准备就绪</h4>
@@ -223,10 +273,10 @@ const ResultsView: React.FC<Props> = ({ result, targetName, onBackToConfig, onUp
                          </div>
                     )}
 
-                    {analysis && (
+                    {analysisText && (
                         <div className="prose prose-slate max-w-none text-slate-700 bg-slate-50/50 p-8 rounded-xl border border-slate-200/60 shadow-inner">
                            {/* Render markdown content */}
-                           {analysis.split('\n').map((line, i) => {
+                           {analysisText.split('\n').map((line, i) => {
                                // Simple custom rendering for better styling
                                if (line.trim().startsWith('###') || line.trim().startsWith('**') && !line.includes(':')) {
                                     return <h4 key={i} className="text-lg font-bold text-slate-800 mt-6 mb-3 flex items-center gap-2">
@@ -249,6 +299,58 @@ const ResultsView: React.FC<Props> = ({ result, targetName, onBackToConfig, onUp
                                <CheckCircle2 size={12} />
                                分析生成完毕
                            </div>
+                        </div>
+                    )}
+
+                    {/* AI Suggested Config Card */}
+                    {suggestedConfig && (
+                        <div className="mt-8 bg-purple-50 border border-purple-100 rounded-xl p-6 shadow-sm animate-fadeIn">
+                             <div className="flex items-start justify-between">
+                                 <div className="flex items-center gap-3">
+                                     <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
+                                         <Sparkles size={24} />
+                                     </div>
+                                     <div>
+                                         <h4 className="font-bold text-purple-900 text-lg">AI 推荐的优化配置</h4>
+                                         <p className="text-purple-600/80 text-sm">基于分析结果，AI 建议尝试以下模型配置以提高效果。</p>
+                                     </div>
+                                 </div>
+                             </div>
+
+                             <div className="mt-4 bg-white/60 rounded-lg p-4 border border-purple-100 text-sm text-purple-800 font-mono">
+                                 <div className="flex gap-2 mb-2">
+                                     <span className="font-bold text-slate-500">Target:</span>
+                                     <span>{suggestedConfig.target}</span>
+                                 </div>
+                                 <div>
+                                     <span className="font-bold text-slate-500 block mb-1">Features ({suggestedConfig.features.length}):</span>
+                                     <div className="flex flex-wrap gap-1">
+                                         {suggestedConfig.features.map((f) => (
+                                             <span key={f.name} className="bg-white border border-purple-200 px-2 py-0.5 rounded shadow-sm text-xs">
+                                                 {f.name}
+                                                 {f.type === 'categorical' && <span className="text-slate-400 ml-1">(cat)</span>}
+                                             </span>
+                                         ))}
+                                     </div>
+                                 </div>
+                             </div>
+
+                             <div className="mt-6 flex items-center gap-3 justify-end">
+                                 <button 
+                                     onClick={handleExportSuggestion}
+                                     className="flex items-center gap-2 px-4 py-2 bg-white text-purple-700 border border-purple-200 hover:bg-purple-50 rounded-lg text-sm font-medium transition-colors"
+                                 >
+                                     <Download size={16} />
+                                     导出配置 (JSON)
+                                 </button>
+                                 <button 
+                                     onClick={() => onApplySuggestion(suggestedConfig)}
+                                     className="flex items-center gap-2 px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition-all transform active:scale-95"
+                                 >
+                                     <ArrowRight size={16} />
+                                     立即应用此配置
+                                 </button>
+                             </div>
                         </div>
                     )}
                 </div>

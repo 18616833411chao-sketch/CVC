@@ -10,11 +10,16 @@ interface Props {
   onConfigComplete: (target: string, features: VariableConfig[], selectedData: DataRow[], targetLogTransform: boolean, targetLogPlusOne: boolean) => void;
   onBack: () => void;
   onImportHistory: (history: ModelHistoryEntry[]) => void;
+  suggestedConfig?: ModelHistoryEntry | null; // New prop
+  onSuggestionLoaded?: () => void; // Callback to clear the suggestion
 }
 
 const ROWS_PER_PAGE = 20;
 
-const VariableSelector: React.FC<Props> = ({ data, headers, history, onConfigComplete, onBack, onImportHistory }) => {
+const VariableSelector: React.FC<Props> = ({ 
+    data, headers, history, onConfigComplete, onBack, onImportHistory,
+    suggestedConfig, onSuggestionLoaded 
+}) => {
   // Data State (Augmented allows adding new columns)
   const [localData, setLocalData] = useState<DataRow[]>([]);
   const [localHeaders, setLocalHeaders] = useState<string[]>([]);
@@ -65,6 +70,18 @@ const VariableSelector: React.FC<Props> = ({ data, headers, history, onConfigCom
         setSelectedRowIndices(new Set(data.map((_, i) => i)));
     }
   }, [data, headers]);
+
+  // Handle Suggested Configuration Auto-Load
+  useEffect(() => {
+      if (suggestedConfig && localData.length > 0) {
+          // Use a small timeout to ensure data is ready
+          const timer = setTimeout(() => {
+              handleRestoreHistory(suggestedConfig);
+              if (onSuggestionLoaded) onSuggestionLoaded();
+          }, 100);
+          return () => clearTimeout(timer);
+      }
+  }, [suggestedConfig, localData]);
 
   // Auto-select logic
   useEffect(() => {
@@ -344,7 +361,7 @@ const VariableSelector: React.FC<Props> = ({ data, headers, history, onConfigCom
     });
 
     if (numericCols.size === 0) {
-      setOutlierMessage("请先配置目标变量或特征变量。");
+      setOutlierMessage("当前未选择任何数值型变量，无需清洗（分类变量已跳过检查）。");
       setTimeout(() => setOutlierMessage(null), 3000);
       return;
     }
@@ -369,8 +386,8 @@ const VariableSelector: React.FC<Props> = ({ data, headers, history, onConfigCom
 
     setSelectedRowIndices(newSelected);
     setOutlierMessage(dirtyCount > 0 
-      ? `清理完成：已自动取消勾选 ${dirtyCount} 条包含非数字内容或空值的记录。` 
-      : "在选定的数值列中未发现脏数据。");
+      ? `清理完成：已自动取消勾选 ${dirtyCount} 条包含非数字内容或空值的记录（仅针对数值变量）。` 
+      : "在选定的数值变量中未发现脏数据（分类变量已跳过检查）。");
     
     setTimeout(() => setOutlierMessage(null), 5000);
   };
@@ -544,11 +561,12 @@ const VariableSelector: React.FC<Props> = ({ data, headers, history, onConfigCom
       setShowHistoryModal(false);
       setValidationError(null);
 
+      // Only show message if it's not a programmatic auto-load (optional refinement, but keep simple for now)
       if (missingVars.length > 0) {
           setOutlierMessage(`恢复部分完成。以下变量无法重建（可能缺少基础数据）：${missingVars.join(', ')}`);
           setTimeout(() => setOutlierMessage(null), 6000);
       } else {
-          setOutlierMessage("已成功加载历史模型配置。");
+          setOutlierMessage("已成功加载模型配置。");
           setTimeout(() => setOutlierMessage(null), 3000);
       }
   };
